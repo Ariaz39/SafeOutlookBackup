@@ -159,7 +159,7 @@ Trap {
     Write-Log ("Mensaje: " + $_.Exception.Message) -Level "ERROR"
     Write-Log ("StackTrace: " + $_.ScriptStackTrace) -Level "ERROR"
 
-    $EmailSubject = "Backup Automatico (Error)"
+    $EmailSubject = "[$($env:COMPUTERNAME)] Backup Automatico (Error Critico)"
     $CurrentFileContext = $(If ($PSTFile) { "`nArchivo siendo procesado: $($PSTFile.FullName)" } Else { "" })
     $EmailBody = @"
 Ha ocurrido un error crítico en el script de backup de PST.
@@ -535,11 +535,11 @@ ForEach ($Result in $BackupResults) {
 $EmailBody += "</table><br>"
 
 If ($OverallStatus -eq "FALLO_PARCIAL") {
-    $EmailSubject = "Backup Automatico (Error)"
+    $EmailSubject = "[$($env:COMPUTERNAME)] Backup Automatico (Error)"
     $EmailBody = "ADVERTENCIA: Se detectaron uno o mas fallos durante el proceso de backup.<br><br>" + $EmailBody
 }
 Else {
-    $EmailSubject = "Backup Automatico (Exito)"
+    $EmailSubject = "[$($env:COMPUTERNAME)] Backup Automatico (Exito)"
 }
 
 $EmailBody += ("Tiempo total de ejecucion del script: " + $TotalElapsedTime + " segundos.")
