@@ -7,7 +7,7 @@ Este script de PowerShell automatiza el proceso de copia de seguridad de uno o v
 *   **MEGA CMD Portable:** Incluye una copia local de MEGA CMD en la carpeta `bin/`, eliminando la necesidad de instalar software adicional en el equipo.
 *   **Consola en Colores:** Sistema de logging visual con códigos de color (Verde para éxito, Amarillo para procesos, Rojo para errores) para un monitoreo intuitivo.
 *   **Gestión de Versiones (Rotación):** Mantiene automáticamente las **2 copias más recientes** de cada archivo PST en OneDrive.
-*   **Nomenclatura con Timestamp:** Archivos con formato `NombreOriginal_AAAA-MM-DD-HH.pst`.
+*   **Nomenclatura Multi-Equipo:** Archivos con formato `NombreEquipo_NombreOriginal_AAAA-MM-DD-HH.pst` para una identificación precisa en entornos con varios PCs.
 *   **Cierre Seguro de Outlook:** Intenta un cierre elegante de Outlook y espera a que los archivos se liberen antes de copiar.
 *   **Validación SHA256:** Garantiza la integridad bit a bit comparando hashes antes de la distribución.
 *   **Notificaciones Visuales:** Alertas tipo BalloonTip en la barra de tareas al iniciar y finalizar.
