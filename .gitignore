@@ -1,17 +1,7 @@
-# Credenciales y configuración sensible
+# MEGA CMD temp files
+bin/MEGAcmd/.megaCmd/
+bin/MEGAcmd/lockMCMD
+bin/MEGAcmd/*.log
+
+# Environment files
 .env
-
-# Archivos temporales de staging y logs (aunque el script los limpia)
-Staging/
-Logs/
-
-# Archivos de sistema de Windows
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-$RECYCLE.BIN/
-
-# Archivos de respaldo de editores y temporales
-*.bak
-*.tmp
-*.log
