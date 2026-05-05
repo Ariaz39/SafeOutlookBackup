@@ -57,7 +57,7 @@ Function Write-Log {
     Write-Host $LogEntry
 }
 
-Function Load-EnvFile {
+Function Import-EnvFile {
     Param (
         [string]$Path = (Join-Path $PSScriptRoot ".env")
     )
@@ -69,11 +69,14 @@ Function Load-EnvFile {
                 $value = $Matches[2].Trim("'").Trim('"').Trim() # Clean quotes and spaces
                 # Expand environment variables in the value (supports %VAR% and $env:VAR)
                 $expandedValue = [System.Environment]::ExpandEnvironmentVariables($value)
-                Try {
-                    $expandedValue = $ExecutionContext.InvokeCommand.ExpandString($expandedValue)
-                }
-                Catch {
-                    # If expansion fails, keep the value as is
+                # Solo expandimos si NO es una credencial para evitar romper hashes o claves con '$'
+                if ($key -notmatch "PASS|SECRET|TOKEN") {
+                    Try {
+                        $expandedValue = $ExecutionContext.InvokeCommand.ExpandString($expandedValue)
+                    }
+                    Catch {
+                        # If expansion fails, keep the value as is
+                    }
                 }
                 $envVars[$key] = $expandedValue
             }
@@ -180,7 +183,7 @@ StackTrace: $($_.ScriptStackTrace)
 Write-Host "Iniciando script de backup de PST..." -ForegroundColor Green
 
 # Cargar variables de entorno
-$envConfig = Load-EnvFile
+$envConfig = Import-EnvFile
 $script:PST_Source_Dir = $envConfig["PST_SOURCE_DIR"]
 $script:SmtpServer = $envConfig["SMTP_SERVER"]
 $script:SmtpPort = $(If ($envConfig["SMTP_PORT"]) { [int]$envConfig["SMTP_PORT"] } Else { 587 })
@@ -292,9 +295,9 @@ ForEach ($PSTFile in $PSTFiles) {
     $BaseFileName = $PSTFile.BaseName
     Write-Log ("Procesando archivo PST: '" + $PST_Source + "'")
 
-    # --- Lógica de Nombres de Archivo con Fecha y Timestamp ---
+    # --- Lógica de Nombres de Archivo con Equipo, Fecha y Timestamp ---
     $Timestamp = Get-Date -Format "yyyy-MM-dd-HH"
-    $BackupFileName = "$($BaseFileName)_$($Timestamp).pst"
+    $BackupFileName = "$($env:COMPUTERNAME)_$($BaseFileName)_$($Timestamp).pst"
     $StagingPSTPath = Join-Path $script:Staging_Folder $BackupFileName
     $OneDrivePSTPath = Join-Path $script:OneDrive_Folder $BackupFileName
 
