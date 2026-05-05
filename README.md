@@ -4,15 +4,14 @@ Este script de PowerShell automatiza el proceso de copia de seguridad de uno o v
 
 ## Características Principales
 
-*   **Variables de Entorno (`.env`):** Las configuraciones se definen en un archivo `.env` externo para facilitar la portabilidad.
-*   **Gestión de Versiones (Rotación):** Mantiene automáticamente las **2 copias más recientes** de cada archivo PST en OneDrive, eliminando versiones antiguas para optimizar el espacio.
-*   **Nomenclatura con Timestamp:** Los archivos se guardan con el formato `NombreOriginal_AAAA-MM-DD-HH.pst` para una identificación precisa.
-*   **Cierre Seguro de Outlook:** Verifica si Outlook está en ejecución e intenta un cierre elegante antes de iniciar la copia.
-*   **Validación SHA256:** Calcula y compara hashes para asegurar que la copia es idéntica al original bit a bit.
-*   **Notificaciones Interactivas:** Muestra alertas visuales (BalloonTips) en la barra de tareas al iniciar y finalizar el proceso.
-*   **Reportes por Correo:** Envía un resumen detallado del backup y **adjunta el archivo de registro (.log)** automáticamente.
-*   **Respaldo Dual (OneDrive + MEGA):** Sube los archivos a ambas nubes en paralelo para máxima redundancia.
-*   **Limpieza Automática:** Elimina la carpeta de tránsito (`staging`) al finalizar para no dejar archivos temporales en el equipo.
+*   **MEGA CMD Portable:** Incluye una copia local de MEGA CMD en la carpeta `bin/`, eliminando la necesidad de instalar software adicional en el equipo.
+*   **Consola en Colores:** Sistema de logging visual con códigos de color (Verde para éxito, Amarillo para procesos, Rojo para errores) para un monitoreo intuitivo.
+*   **Gestión de Versiones (Rotación):** Mantiene automáticamente las **2 copias más recientes** de cada archivo PST en OneDrive.
+*   **Nomenclatura con Timestamp:** Archivos con formato `NombreOriginal_AAAA-MM-DD-HH.pst`.
+*   **Cierre Seguro de Outlook:** Intenta un cierre elegante de Outlook y espera a que los archivos se liberen antes de copiar.
+*   **Validación SHA256:** Garantiza la integridad bit a bit comparando hashes antes de la distribución.
+*   **Notificaciones Visuales:** Alertas tipo BalloonTip en la barra de tareas al iniciar y finalizar.
+*   **Respaldo Dual (OneDrive + MEGA):** Máxima redundancia enviando copias a ambas nubes simultáneamente.
 
 ## Requisitos
 
@@ -24,19 +23,24 @@ Este script de PowerShell automatiza el proceso de copia de seguridad de uno o v
 
 ### 1. Archivo `.env`
 
-Crea un archivo `.env` en la misma carpeta del script con los siguientes parámetros:
+Crea un archivo `.env` en la raíz del proyecto. El script ignorará este archivo en Git por seguridad. Ejemplo:
 
 ```ini
-# Directorio de origen de los PST
-PST_SOURCE_DIR="$env:USERPROFILE\Documents\Archivos de Outlook"
+# --- RUTAS ---
+PST_SOURCE_DIR="C:\Users\TuUsuario\Documents\Archivos de Outlook"
 
-# Configuración SMTP
-SMTP_SERVER="mail.tuempresa.com"
+# --- CONFIGURACIÓN SMTP ---
+SMTP_SERVER="smtp.tuempresa.com"
 SMTP_PORT=587
-SMTP_FROM="info@tuempresa.com"
-SMTP_TO="sistemas@tuempresa.com"
-SMTP_USERNAME="info@tuempresa.com"
-SMTP_PASSWORD="tu_password_segura"
+SMTP_FROM="backup@tuempresa.com"
+SMTP_TO="admin@tuempresa.com"
+SMTP_USERNAME="backup@tuempresa.com"
+SMTP_PASSWORD="tu_password_smtp"
+
+# --- CONFIGURACIÓN MEGA ---
+MEGA_USER="tu_usuario_mega@email.com"
+MEGA_PASS="tu_password_mega"
+MEGA_REMOTE_DEST="backup_correos_v2"
 ```
 
 > [!IMPORTANT]
