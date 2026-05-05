@@ -359,7 +359,8 @@ ForEach ($PSTFile in $PSTFiles) {
 
     # --- Lógica de Nombres de Archivo con Fecha y Timestamp ---
     $Timestamp = Get-Date -Format "yyyy-MM-dd-HH"
-    $BackupFileName = "$($BaseFileName)_$($Timestamp).pst"
+    # Incluimos el nombre del equipo para permitir múltiples PCs en la misma carpeta
+    $BackupFileName = "$($env:COMPUTERNAME)_$($BaseFileName)_$($Timestamp).pst"
     $StagingPSTPath = Join-Path $script:Staging_Folder $BackupFileName
     $OneDrivePSTPath = Join-Path $script:OneDrive_Folder $BackupFileName
 
