@@ -259,6 +259,8 @@ If ($OutlookProcess) {
             Exit 1
         }
         Write-Log "Outlook se ha cerrado éxitosamente."
+        Write-Log "Esperando 20 segundos de 'tiempo de asentamiento' para que el sistema libere los archivos naturalmente..."
+        Start-Sleep -Seconds 20
     }
     Catch {
         Write-Log ("ERROR al intentar cerrar Outlook elegantemente: " + $_.Exception.Message + ". Abortando.") -Level "ERROR"
@@ -302,21 +304,39 @@ ForEach ($PSTFile in $PSTFiles) {
 
     #region 3.1 Fase de 'Snapshot' (Velocidad de Operacion)
     Write-Log "Iniciando fase de snapshot: copiando PST a la carpeta de transito local."
-    Try {
-        Copy-Item -Path $PST_Source -Destination $StagingPSTPath -Force -ErrorAction Stop
-        Write-Log ("Copia local del PST completada en '" + $StagingPSTPath + "'.")
-    }
-    Catch {
-        Write-Log ("ERROR durante la fase de snapshot (copia local) para '" + $BaseFileName + "': " + $_.Exception.Message + ". Saltando este archivo.") -Level "ERROR"
-        $BackupResults += [PSCustomObject]@{
-            FileName    = $BaseFileName
-            Status      = "FALLO_SNAPSHOT"
-            Details     = $_.Exception.Message
-            Hash        = "N/A"
-            SizeMB      = "N/A"
-            TimeSeconds = "N/A"
+    $MaxRetries = 12
+    $RetryCount = 0
+    $SnapshotSuccess = $false
+
+    While ($RetryCount -lt $MaxRetries) {
+        $RetryCount++
+        Try {
+            Copy-Item -Path $PST_Source -Destination $StagingPSTPath -Force -ErrorAction Stop
+            $SnapshotSuccess = $true
+            Write-Log ("Copia local del PST completada en '" + $StagingPSTPath + "' (Intento $RetryCount).")
+            Break # Exito, salir del bucle While
         }
-        Continue # Salta al siguiente archivo PST
+        Catch {
+            If ($RetryCount -lt $MaxRetries) {
+                Write-Log ("ADVERTENCIA: Intento $RetryCount fallido para '$BaseFileName'. El archivo sigue ocupado. Reintentando en 15 segundos...") -Level "WARN"
+                Start-Sleep -Seconds 15
+            }
+            Else {
+                Write-Log ("ERROR persistente durante la fase de snapshot para '$BaseFileName' tras $MaxRetries intentos: " + $_.Exception.Message + ". Saltando este archivo.") -Level "ERROR"
+                $BackupResults += [PSCustomObject]@{
+                    FileName    = $BaseFileName
+                    Status      = "FALLO_SNAPSHOT"
+                    Details     = "Bloqueo persistente tras 3 minutos de espera: " + $_.Exception.Message
+                    Hash        = "N/A"
+                    SizeMB      = "N/A"
+                    TimeSeconds = "N/A"
+                }
+            }
+        }
+    }
+
+    If (-not $SnapshotSuccess) {
+        Continue # Salta al siguiente archivo PST en el ForEach loop
     }
     #endregion
 
