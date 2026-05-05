@@ -11,6 +11,7 @@ Este script de PowerShell automatiza el proceso de copia de seguridad de uno o v
 *   **Validación SHA256:** Calcula y compara hashes para asegurar que la copia es idéntica al original bit a bit.
 *   **Notificaciones Interactivas:** Muestra alertas visuales (BalloonTips) en la barra de tareas al iniciar y finalizar el proceso.
 *   **Reportes por Correo:** Envía un resumen detallado del backup y **adjunta el archivo de registro (.log)** automáticamente.
+*   **Respaldo Dual (OneDrive + MEGA):** Sube los archivos a ambas nubes en paralelo para máxima redundancia.
 *   **Limpieza Automática:** Elimina la carpeta de tránsito (`staging`) al finalizar para no dejar archivos temporales en el equipo.
 
 ## Requisitos
@@ -60,6 +61,17 @@ El script envía un correo con el asunto:
 *   `Backup Automatico (Error)`: Si hubo fallos o errores críticos.
 
 El archivo de registro detallado se envía como **adjunto** en estos correos.
+
+## Tiempos Estimados de Subida
+
+Tiempos aproximados basados en la **Velocidad de Subida (Upload)** de tu conexión (Horas : Minutos):
+
+| Tamaño PST | 10 Mbps (Subida) | 20 Mbps (Subida) | 50 Mbps (Subida) | 100 Mbps (Subida) |
+| :--- | :--- | :--- | :--- | :--- |
+| **5 GB** | 1h 08m | 34 min | 14 min | 7 min |
+| **10 GB** | 2h 16m | 1h 08m | 27 min | 14 min |
+| **20 GB** | 4h 33m | 2h 16m | 54 min | 27 min |
+| **50 GB** | 11h 22m | 5h 41m | 2h 16m | 1h 08m |
 
 ---
 **Nota de Codificación:** El script debe guardarse siempre como **UTF-8 con BOM** para asegurar que las tildes y caracteres especiales se muestren correctamente en las notificaciones.

@@ -69,14 +69,11 @@ Function Import-EnvFile {
                 $value = $Matches[2].Trim("'").Trim('"').Trim() # Clean quotes and spaces
                 # Expand environment variables in the value (supports %VAR% and $env:VAR)
                 $expandedValue = [System.Environment]::ExpandEnvironmentVariables($value)
-                # Solo expandimos si NO es una credencial para evitar romper hashes o claves con '$'
-                if ($key -notmatch "PASS|SECRET|TOKEN") {
-                    Try {
-                        $expandedValue = $ExecutionContext.InvokeCommand.ExpandString($expandedValue)
-                    }
-                    Catch {
-                        # If expansion fails, keep the value as is
-                    }
+                Try {
+                    $expandedValue = $ExecutionContext.InvokeCommand.ExpandString($expandedValue)
+                }
+                Catch {
+                    # If expansion fails, keep the value as is
                 }
                 $envVars[$key] = $expandedValue
             }
@@ -183,6 +180,15 @@ StackTrace: $($_.ScriptStackTrace)
 Write-Host "Iniciando script de backup de PST..." -ForegroundColor Green
 
 # Cargar variables de entorno
+# Limpiar variables de sesión previa para evitar conflictos de rutas
+$script:LogFile = $null
+$script:LogFolder = $null
+
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "Iniciando script de backup de PST..." -ForegroundColor Cyan
+Write-Host "==========================================" -ForegroundColor Cyan
+
+# Cargar variables de entorno
 $envConfig = Import-EnvFile
 $script:PST_Source_Dir = $envConfig["PST_SOURCE_DIR"]
 $script:SmtpServer = $envConfig["SMTP_SERVER"]
@@ -192,40 +198,84 @@ $script:SmtpTo = $envConfig["SMTP_TO"]
 $script:SmtpUsername = $envConfig["SMTP_USERNAME"]
 $script:SmtpPassword = $envConfig["SMTP_PASSWORD"]
 
+# 1.1 Configuración de MEGA
+$script:MegaUser = $envConfig["MEGA_USER"]
+$script:MegaPass = $envConfig["MEGA_PASS"]
+$script:MegaRemoteDest = $envConfig["MEGA_REMOTE_DEST"]
+
 # 1.1 Determinar y crear la Carpeta de Transito (Staging Folder)
 $script:Staging_Folder = Join-Path $env:USERPROFILE "Documents\OutlookBackupStaging"
 If (-not (Test-Path $script:Staging_Folder)) {
-    Write-Log ("Creando carpeta de transito: '" + $script:Staging_Folder + "'.")
+    Write-Host "[+] Creando carpeta de transito: '$script:Staging_Folder'."
     New-Item -Path $script:Staging_Folder -ItemType Directory | Out-Null
 }
 Else {
-    Write-Log ("Carpeta de transito existente: '" + $script:Staging_Folder + "'.")
+    Write-Host "[+] Carpeta de transito detectada: '$script:Staging_Folder'."
 }
 
-# 1.2 Determinar y crear la Carpeta de OneDrive
+# 1.1 Determinar y crear la Carpeta de OneDrive
 $CorporateOneDriveRoot = Find-CorporateOneDriveRoot
 If (-not $CorporateOneDriveRoot) {
-    Write-Log "ERROR: No se pudo detectar la raiz de OneDrive corporativo. Asegúrate de que OneDrive esta configurado y sincronizado." -Level "ERROR"
+    Write-Host "ERROR: No se pudo detectar la raiz de OneDrive corporativo." -ForegroundColor Red
     Exit 1
 }
 $script:OneDrive_Folder = Join-Path $CorporateOneDriveRoot "backup_correos"
 If (-not (Test-Path $script:OneDrive_Folder)) {
-    Write-Log ("Creando carpeta de OneDrive: '" + $script:OneDrive_Folder + "'.")
+    Write-Host "[+] Creando carpeta de OneDrive: '$script:OneDrive_Folder'."
     New-Item -Path $script:OneDrive_Folder -ItemType Directory | Out-Null
 }
 Else {
-    Write-Log ("Carpeta de OneDrive existente: '" + $script:OneDrive_Folder + "'.")
+    Write-Host "[+] Carpeta de OneDrive detectada: '$script:OneDrive_Folder'."
 }
 
-# Crear carpeta de logs si no existe
+# 1.2 Crear carpeta de logs inmediatamente (Vital para evitar errores de escritura)
 $script:LogFolder = Join-Path $script:Staging_Folder "Logs"
 If (-not (Test-Path $script:LogFolder)) {
     New-Item -Path $script:LogFolder -ItemType Directory | Out-Null
 }
 $script:LogFile = Join-Path $script:LogFolder ("OutlookPSTBackup_" + (Get-Date -Format "yyyyMMdd_HHmmss") + ".log")
 
-Write-Log "Variables de configuracion cargadas del archivo .env y rutas dinamicas establecidas."
-Write-Log ("PST Origen Directorio: " + $script:PST_Source_Dir)
+Write-Log "=========================================="
+Write-Log "Iniciando script de backup de PST..."
+Write-Log "=========================================="
+
+# 1.3 Verificación y Login de MEGA CMD
+Write-Log "Verificando estado de MEGA CMD..."
+If (-not (Get-Command "mega-put" -ErrorAction SilentlyContinue)) {
+    Write-Log "MEGA CMD no detectado. Intentando instalación automática vía Winget..."
+    Try {
+        # Instalación silenciosa
+        Start-Process "winget" -ArgumentList "install --id MEGA.MEGACMD --silent --accept-source-agreements --accept-package-agreements" -Wait
+        $env:Path += ";C:\AppData\Local\MEGAcmd;C:\Program Files\MEGA CMD"
+        Write-Log "Instalación de MEGA CMD completada."
+    }
+    Catch {
+        Write-Log "ERROR: No se pudo instalar MEGA CMD automáticamente. El respaldo a MEGA se omitirá." -Level "ERROR"
+        $script:MegaEnabled = $false
+    }
+}
+
+If (Get-Command "mega-put" -ErrorAction SilentlyContinue) {
+    $script:MegaEnabled = $true
+    # Asegurar que el servidor esté corriendo
+    If (-not (Get-Process "Mega-cmd-server" -ErrorAction SilentlyContinue)) {
+        Write-Log "Iniciando servidor de MEGA CMD..."
+        # Intentar localizar el ejecutable si no está en el PATH todavía
+        $MegaServer = Get-Command "Mega-cmd-server.exe" -ErrorAction SilentlyContinue
+        If ($MegaServer) {
+            Start-Process $MegaServer.Source -WindowStyle Hidden
+            Start-Sleep -Seconds 5
+        }
+    }
+    # Login si el usuario no es el correcto
+    $WhoAmI = mega-whoami 2>&1
+    If ($WhoAmI -notmatch $script:MegaUser) {
+        Write-Log "Cambiando sesión de MEGA a: $($script:MegaUser)..."
+        mega-logout | Out-Null
+        mega-login $script:MegaUser $script:MegaPass
+    }
+    Write-Log "Sesión de MEGA ($script:MegaUser) validada exitosamente."
+}
 Write-Log ("Carpeta de Transito: " + $script:Staging_Folder)
 Write-Log ("Carpeta de OneDrive: " + $script:OneDrive_Folder)
 Write-Log ("Archivo de Log: " + $script:LogFile)
@@ -295,9 +345,9 @@ ForEach ($PSTFile in $PSTFiles) {
     $BaseFileName = $PSTFile.BaseName
     Write-Log ("Procesando archivo PST: '" + $PST_Source + "'")
 
-    # --- Lógica de Nombres de Archivo con Equipo, Fecha y Timestamp ---
+    # --- Lógica de Nombres de Archivo con Fecha y Timestamp ---
     $Timestamp = Get-Date -Format "yyyy-MM-dd-HH"
-    $BackupFileName = "$($env:COMPUTERNAME)_$($BaseFileName)_$($Timestamp).pst"
+    $BackupFileName = "$($BaseFileName)_$($Timestamp).pst"
     $StagingPSTPath = Join-Path $script:Staging_Folder $BackupFileName
     $OneDrivePSTPath = Join-Path $script:OneDrive_Folder $BackupFileName
 
@@ -389,118 +439,158 @@ ForEach ($PSTFile in $PSTFiles) {
     #region 5. Gestión de Archivos y OneDrive
     Write-Log ("Moviendo archivo validado a la carpeta de OneDrive para '" + $BaseFileName + "': '" + $script:OneDrive_Folder + "'...")
     Try {
-        If (-not (Test-Path $script:OneDrive_Folder)) {
-            New-Item -Path $script:OneDrive_Folder -ItemType Directory -Force | Out-Null
-        }
+        # region 5. Gestión de Archivos (OneDrive y MEGA)
+        Write-Log ("Iniciando distribución de archivos validados para '" + $BaseFileName + "'...")
+        Try {
+            # 5.1 Subida a MEGA
+            If ($script:MegaEnabled) {
+                Write-Log ("Enviando subida a MEGA para '" + $BaseFileName + "'...")
+                # Añadimos -c para que cree la carpeta si no existe
+                & mega-put -c "$StagingPSTPath" "$script:MegaRemoteDest"
+                Write-Log "Archivo aceptado por MEGA CMD (subida en curso)."
+            }
 
-        Move-Item -Path $StagingPSTPath -Destination $OneDrivePSTPath -Force -ErrorAction Stop
-        Write-Log ("Archivo PST '" + $BaseFileName + "' movido a OneDrive: '" + $OneDrivePSTPath + "'.")
+            # 5.2 Copia a OneDrive
+            If (-not (Test-Path $script:OneDrive_Folder)) {
+                New-Item -Path $script:OneDrive_Folder -ItemType Directory -Force | Out-Null
+            }
 
-        # --- Gestión de Rotacion (Mantener solo las 2 copias mas recientes) ---
-        $OldBackups = Get-ChildItem -Path $script:OneDrive_Folder -Filter "$($BaseFileName)_*.pst" | 
-        Sort-Object LastWriteTime -Descending
-        If ($OldBackups.Count -gt 2) {
-            $FilesToDelete = $OldBackups | Select-Object -Skip 2
-            ForEach ($FileToDelete in $FilesToDelete) {
-                Write-Log ("Rotacion: Eliminando backup antiguo '" + $FileToDelete.Name + "'.")
-                Remove-Item -Path $FileToDelete.FullName -Force
+            Write-Log ("Copiando archivo a OneDrive: '" + $OneDrivePSTPath + "'...")
+            Copy-Item -Path $StagingPSTPath -Destination $OneDrivePSTPath -Force -ErrorAction Stop
+            Write-Log ("Archivo PST '" + $BaseFileName + "' copiado a OneDrive exitosamente.")
+
+            # --- Gestión de Rotación en OneDrive (Mantener solo las 2 copias mas recientes) ---
+            $OldBackups = Get-ChildItem -Path $script:OneDrive_Folder -Filter "$($env:COMPUTERNAME)_$($BaseFileName)_*.pst" | 
+            Sort-Object LastWriteTime -Descending
+            If ($OldBackups.Count -gt 2) {
+                $FilesToDelete = $OldBackups | Select-Object -Skip 2
+                ForEach ($FileToDelete in $FilesToDelete) {
+                    Write-Log ("Rotación OneDrive: Eliminando backup antiguo '" + $FileToDelete.Name + "'.")
+                    Remove-Item -Path $FileToDelete.FullName -Force
+                }
+            }
+
+            $FinalFileSizeMB = ([math]::Round((Get-Item $OneDrivePSTPath).Length / 1MB, 2))
+            $BackupResults += [PSCustomObject]@{
+                FileName    = $BaseFileName
+                Status      = "EXITO"
+                Details     = "Backup completado (OneDrive y MEGA encolado)."
+                Hash        = $StagingHash
+                SizeMB      = $FinalFileSizeMB
+                TimeSeconds = ([math]::Round((Get-Date).Subtract($ScriptStartTime).TotalSeconds, 2))
             }
         }
-
-        $FinalFileSizeMB = ([math]::Round((Get-Item $OneDrivePSTPath).Length / 1MB, 2))
-        $BackupResults += [PSCustomObject]@{
-            FileName    = $BaseFileName
-            Status      = "EXITO"
-            Details     = "Backup completado."
-            Hash        = $StagingHash
-            SizeMB      = $FinalFileSizeMB
-            TimeSeconds = ([math]::Round((Get-Date).Subtract($ScriptStartTime).TotalSeconds, 2))
+        Catch {
+            Write-Log ("ERROR durante la distribucion de archivos para '" + $BaseFileName + "': " + $_.Exception.Message + ". Saltando este archivo.") -Level "ERROR"
+            # En caso de error, no borramos el archivo de staging para permitir inspección si es necesario
+            $BackupResults += [PSCustomObject]@{
+                FileName    = $BaseFileName
+                Status      = "FALLO_DISTRIBUCION"
+                Details     = $_.Exception.Message
+                Hash        = "N/A"
+                SizeMB      = "N/A"
+                TimeSeconds = "N/A"
+            }
+            Continue # Salta al siguiente archivo PST
         }
-    }
-    Catch {
-        Write-Log ("ERROR durante la gestion de archivos y OneDrive para '" + $BaseFileName + "': " + $_.Exception.Message + ". Saltando este archivo.") -Level "ERROR"
-        Remove-Item -Path $StagingPSTPath -Force -ErrorAction SilentlyContinue # Clean up
-        $BackupResults += [PSCustomObject]@{
-            FileName    = $BaseFileName
-            Status      = "FALLO_ONEDRIVE"
-            Details     = $_.Exception.Message
-            Hash        = "N/A"
-            SizeMB      = "N/A"
-            TimeSeconds = "N/A"
+        # endregion
+        Write-Host ">>> IMPORTANTE: Outlook ya puede ser reabierto. <<<" -ForegroundColor Yellow
+        Write-Host "=======================================================" -ForegroundColor Cyan
+        Write-Log "Notificación al usuario: Outlook puede ser reabierto."
+        #endregion
+
+        #region 6. Trazabilidad y Notificación SMTP (Final)
+        $ScriptEndTime = Get-Date
+        $ElapsedTime = ([math]::Round(($ScriptEndTime - $ScriptStartTime).TotalSeconds, 2))
+
+        Write-Log "Procesamiento de todos los archivos PST completado."
+        Write-Log ("Tiempo total de ejecución del script: " + $ElapsedTime + " segundos.")
+
+        $EmailSubject = "Resumen de Backup PST Outlook"
+        $EmailBody = "El script de backup de PST ha finalizado. Aqui esta el resumen de cada archivo:<br><br>"
+        $EmailBody += "<table border='1' cellpadding='5' cellspacing='0'>"
+        $EmailBody += "<tr><th>Archivo</th><th>Estado</th><th>Detalles</th><th>Hash SHA256</th><th>Tamano (MB)</th></tr>"
+
+        $OverallStatus = "EXITO"
+        ForEach ($Result in $BackupResults) {
+            $EmailBody += "<tr>"
+            $EmailBody += "<td>$($Result.FileName)</td>"
+            $EmailBody += "<td>$($Result.Status)</td>"
+            $EmailBody += "<td>$($Result.Details)</td>"
+            $EmailBody += "<td>$($Result.Hash)</td>"
+            $EmailBody += "<td>$($Result.SizeMB)</td>"
+            $EmailBody += "</tr>"
+            If ($Result.Status -ne "EXITO") {
+                $OverallStatus = "FALLO_PARCIAL"
+            }
         }
-        Continue # Salta al siguiente archivo PST
+        $EmailBody += "</table><br>"
+
+        If ($OverallStatus -eq "FALLO_PARCIAL") {
+            $EmailSubject = "Backup Automatico (Error)"
+            $EmailBody = "ADVERTENCIA: Se detectaron uno o mas fallos durante el proceso de backup.<br><br>" + $EmailBody
+        }
+        ElseIf ($BackupResults.Count -eq 0) {
+            $OverallStatus = "ADVERTENCIA"
+            $EmailSubject = "Backup Automatico (Error)"
+            $EmailBody = "ADVERTENCIA: No se procesaron archivos PST. Verifique el directorio de origen.<br><br>"
+        }
+        else {
+            $EmailSubject = "Backup Automatico (Exito)"
+        }
+
+        $EmailBody += ("Tiempo total de ejecucion del script: " + $ElapsedTime + " segundos.")
+        $EmailBody += "<br><br>Este es un mensaje automatico. Por favor, no responder a este correo."
+
+        Try {
+            If ($script:SmtpServer -and $script:SmtpUsername -and $script:SmtpPassword) {
+                $SecureSmtpCreds = New-Object System.Management.Automation.PSCredential($script:SmtpUsername, ($script:SmtpPassword | ConvertTo-SecureString -AsPlainText -Force))
+                Send-MailMessage -To $script:SmtpTo -From $script:SmtpFrom -Subject $EmailSubject -Body $EmailBody -SmtpServer $script:SmtpServer -Port $script:SmtpPort -UseSSL -Credential $SecureSmtpCreds -BodyAsHtml -Attachments $script:LogFile -WarningAction SilentlyContinue
+                Write-Log "Notificación de resumen de backup enviada por correo."
+            }
+        }
+        Catch {
+            Write-Log ("ERROR: Fallo al enviar notificacion de resumen por correo: " + $_.Exception.Message) -Level "ERROR"
+        }
+
+        # Notificación final en pantalla
+        $FinalMsg = $(If ($OverallStatus -eq "EXITO") { "El backup de Outlook ha finalizado con éxito. Ya puede continuar con sus actividades normalmente." } Else { "El backup ha finalizado, pero se detectaron algunos detalles. Por favor, informele al area de TI." })
+        $FinalTitle = $(If ($OverallStatus -eq "EXITO") { "Backup Completado" } Else { "Backup con Advertencias" })
+
+        # Limpieza final: Eliminar carpeta de staging y logs
+        Write-Log "Limpiando archivos temporales..."
+        Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
+        # Limpieza final: Esperar a MEGA y eliminar carpeta de staging
+        If ($script:MegaEnabled) {
+            Write-Log "Sincronización: Verificando cola de subidas de MEGA..."
+            $MaxWaitMinutes = 120
+            $WaitCount = 0
+    
+            # Esperamos mientras haya CUALQUIER transferencia activa (Upload o Queue)
+            While (($WaitCount -lt ($MaxWaitMinutes * 6))) {
+                $Transfers = mega-transfers 2>&1
+                # Si no hay transferencias, mega-transfers suele devolver un mensaje específico o estar vacío
+                If ($Transfers -match "No active transfers" -or $Transfers.Count -le 1 -or -not $Transfers) {
+                    Break
+                }
+        
+                Start-Sleep -Seconds 10
+                $WaitCount++
+                If ($WaitCount % 6 -eq 0) {
+                    Write-Log "MEGA sigue procesando archivos. No cierres el script..."
+                }
+            }
+    
+            Write-Log "Sincronización de MEGA finalizada."
+    
+            # Cerrar sesión para dejar el equipo limpio
+            Write-Log "Cerrando sesión de MEGA..."
+            mega-logout | Out-Null
+        }
+
+        Write-Log "Limpiando archivos temporales de staging..."
+        Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
+
+        Show-UserMessage -Title $FinalTitle -Message $FinalMsg
     }
-    #endregion
 }
-
-Write-Host "`n=======================================================" -ForegroundColor Cyan
-Write-Host ">>> IMPORTANTE: Outlook ya puede ser reabierto. <<<" -ForegroundColor Yellow
-Write-Host "=======================================================" -ForegroundColor Cyan
-Write-Log "Notificación al usuario: Outlook puede ser reabierto."
-#endregion
-
-#region 6. Trazabilidad y Notificación SMTP (Final)
-$ScriptEndTime = Get-Date
-$ElapsedTime = ([math]::Round(($ScriptEndTime - $ScriptStartTime).TotalSeconds, 2))
-
-Write-Log "Procesamiento de todos los archivos PST completado."
-Write-Log ("Tiempo total de ejecución del script: " + $ElapsedTime + " segundos.")
-
-$EmailSubject = "Resumen de Backup PST Outlook"
-$EmailBody = "El script de backup de PST ha finalizado. Aqui esta el resumen de cada archivo:<br><br>"
-$EmailBody += "<table border='1' cellpadding='5' cellspacing='0'>"
-$EmailBody += "<tr><th>Archivo</th><th>Estado</th><th>Detalles</th><th>Hash SHA256</th><th>Tamano (MB)</th></tr>"
-
-$OverallStatus = "EXITO"
-ForEach ($Result in $BackupResults) {
-    $EmailBody += "<tr>"
-    $EmailBody += "<td>$($Result.FileName)</td>"
-    $EmailBody += "<td>$($Result.Status)</td>"
-    $EmailBody += "<td>$($Result.Details)</td>"
-    $EmailBody += "<td>$($Result.Hash)</td>"
-    $EmailBody += "<td>$($Result.SizeMB)</td>"
-    $EmailBody += "</tr>"
-    If ($Result.Status -ne "EXITO") {
-        $OverallStatus = "FALLO_PARCIAL"
-    }
-}
-$EmailBody += "</table><br>"
-
-If ($OverallStatus -eq "FALLO_PARCIAL") {
-    $EmailSubject = "Backup Automatico (Error)"
-    $EmailBody = "ADVERTENCIA: Se detectaron uno o mas fallos durante el proceso de backup.<br><br>" + $EmailBody
-}
-ElseIf ($BackupResults.Count -eq 0) {
-    $OverallStatus = "ADVERTENCIA"
-    $EmailSubject = "Backup Automatico (Error)"
-    $EmailBody = "ADVERTENCIA: No se procesaron archivos PST. Verifique el directorio de origen.<br><br>"
-}
-else {
-    $EmailSubject = "Backup Automatico (Exito)"
-}
-
-$EmailBody += ("Tiempo total de ejecucion del script: " + $ElapsedTime + " segundos.")
-$EmailBody += "<br><br>Este es un mensaje automatico. Por favor, no responder a este correo."
-
-Try {
-    If ($script:SmtpServer -and $script:SmtpUsername -and $script:SmtpPassword) {
-        $SecureSmtpCreds = New-Object System.Management.Automation.PSCredential($script:SmtpUsername, ($script:SmtpPassword | ConvertTo-SecureString -AsPlainText -Force))
-        Send-MailMessage -To $script:SmtpTo -From $script:SmtpFrom -Subject $EmailSubject -Body $EmailBody -SmtpServer $script:SmtpServer -Port $script:SmtpPort -UseSSL -Credential $SecureSmtpCreds -BodyAsHtml -Attachments $script:LogFile -WarningAction SilentlyContinue
-        Write-Log "Notificación de resumen de backup enviada por correo."
-    }
-}
-Catch {
-    Write-Log ("ERROR: Fallo al enviar notificacion de resumen por correo: " + $_.Exception.Message) -Level "ERROR"
-}
-
-# Notificación final en pantalla
-$FinalMsg = $(If ($OverallStatus -eq "EXITO") { "El backup de Outlook ha finalizado con éxito. Ya puede continuar con sus actividades normalmente." } Else { "El backup ha finalizado, pero se detectaron algunos detalles. Por favor, informele al area de TI." })
-$FinalTitle = $(If ($OverallStatus -eq "EXITO") { "Backup Completado" } Else { "Backup con Advertencias" })
-
-# Limpieza final: Eliminar carpeta de staging y logs
-Write-Log "Limpiando archivos temporales..."
-Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
-
-Show-UserMessage -Title $FinalTitle -Message $FinalMsg
-
-#endregion
