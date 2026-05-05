@@ -593,4 +593,9 @@ ForEach ($PSTFile in $PSTFiles) {
 
         Show-UserMessage -Title $FinalTitle -Message $FinalMsg
     }
+    Catch {
+        Write-Log ("Error final en el script: " + $_.Exception.Message) -Level "ERROR"
+        # Intentar limpiar staging incluso si hay error
+        Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
