@@ -79,3 +79,8 @@ Tiempos aproximados basados en la **Velocidad de Subida (Upload)** de tu conexi�
 
 ---
 **Nota de Codificación:** El script debe guardarse siempre como **UTF-8 con BOM** para asegurar que las tildes y caracteres especiales se muestren correctamente en las notificaciones.
+
+## Créditos y Licencias
+
+*   **MEGA CMD:** Este script utiliza los binarios de [MEGA CMD](https://github.com/meganz/MEGAcmd), los cuales se distribuyen bajo la licencia **GPLv3**. MEGA es una marca registrada de MEGA Ltd.
+*   **Seguridad:** Este script se proporciona "tal cual", sin garantías. El usuario es responsable de la custodia de sus credenciales en el archivo `.env`.
