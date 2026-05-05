@@ -56,10 +56,10 @@ Function Write-Log {
     $Color = "White"
     Switch ($Level) {
         "SUCCESS" { $Color = "Green" }
-        "ERROR"   { $Color = "Red" }
-        "WARN"    { $Color = "Yellow" }
+        "ERROR" { $Color = "Red" }
+        "WARN" { $Color = "Yellow" }
         "PROCESS" { $Color = "Yellow" }
-        "INFO"    { $Color = "White" }
+        "INFO" { $Color = "White" }
     }
 
     If ($script:LogFile) {
@@ -114,7 +114,8 @@ Function Find-CorporateOneDriveRoot {
             $Val = Get-ItemProperty -Path $AccountPath -Name "UserFolder" -ErrorAction SilentlyContinue
             If ($Val) { $OneDriveRoot = $Val.UserFolder }
         }
-    } Catch {}
+    }
+    Catch {}
 
     # Fallback: Intentar por variables de entorno si el registro falla o es nulo
     If (-not $OneDriveRoot) {
@@ -264,28 +265,28 @@ If (-not $WhoAmIPath) {
     $script:MegaEnabled = $false
 }
 
-        # 1.4 Inicialización de Sesión
-        If ($script:MegaEnabled) {
-            # El servidor suele ser siempre .exe
-            $ServerPath = Join-Path $script:MegaBinPath "MEGAcmdServer.exe"
-            If (-not (Test-Path $ServerPath)) { $ServerPath = Join-Path $script:MegaBinPath "Mega-cmd-server.exe" }
+# 1.4 Inicialización de Sesión
+If ($script:MegaEnabled) {
+    # El servidor suele ser siempre .exe
+    $ServerPath = Join-Path $script:MegaBinPath "MEGAcmdServer.exe"
+    If (-not (Test-Path $ServerPath)) { $ServerPath = Join-Path $script:MegaBinPath "Mega-cmd-server.exe" }
         
-            If (-not (Get-Process "MEGAcmdServer" -ErrorAction SilentlyContinue) -and -not (Get-Process "Mega-cmd-server" -ErrorAction SilentlyContinue)) {
-                Write-Log "Iniciando servidor de MEGA CMD local..." -Level "PROCESS"
-                Start-Process $ServerPath -WindowStyle Hidden
-                Start-Sleep -Seconds 10
-            }
+    If (-not (Get-Process "MEGAcmdServer" -ErrorAction SilentlyContinue) -and -not (Get-Process "Mega-cmd-server" -ErrorAction SilentlyContinue)) {
+        Write-Log "Iniciando servidor de MEGA CMD local..." -Level "PROCESS"
+        Start-Process $ServerPath -WindowStyle Hidden
+        Start-Sleep -Seconds 10
+    }
         
-            $WhoAmI = & $WhoAmIPath 2>&1
-            If ($WhoAmI -notmatch $script:MegaUser) {
-                Write-Log "Cambiando sesión de MEGA a: $($script:MegaUser)..." -Level "PROCESS"
-                $LogoutPath = Get-MegaCmdPath "mega-logout"
-                $LoginPath = Get-MegaCmdPath "mega-login"
-                & $LogoutPath | Out-Null
-                & $LoginPath $script:MegaUser $script:MegaPass
-            }
-            Write-Log "Sesión de MEGA ($script:MegaUser) validada exitosamente." -Level "SUCCESS"
-        }
+    $WhoAmI = & $WhoAmIPath 2>&1
+    If ($WhoAmI -notmatch $script:MegaUser) {
+        Write-Log "Cambiando sesión de MEGA a: $($script:MegaUser)..." -Level "PROCESS"
+        $LogoutPath = Get-MegaCmdPath "mega-logout"
+        $LoginPath = Get-MegaCmdPath "mega-login"
+        & $LogoutPath | Out-Null
+        & $LoginPath $script:MegaUser $script:MegaPass
+    }
+    Write-Log "Sesión de MEGA ($script:MegaUser) validada exitosamente." -Level "SUCCESS"
+}
 Write-Log ("Carpeta de Transito: " + $script:Staging_Folder)
 Write-Log ("Carpeta de OneDrive: " + $script:OneDrive_Folder)
 Write-Log ("Archivo de Log: " + $script:LogFile)
@@ -507,73 +508,73 @@ Write-Host ">>> IMPORTANTE: Outlook ya puede ser reabierto. <<<" -ForegroundColo
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Log "Notificación al usuario: Outlook puede ser reabierto." -Level "SUCCESS"
 
-    #region 6. Trazabilidad y Notificación SMTP (Resumen Final)
-    $ScriptEndTime = Get-Date
-    $TotalElapsedTime = ([math]::Round(($ScriptEndTime - $ScriptStartTime).TotalSeconds, 2))
+#region 6. Trazabilidad y Notificación SMTP (Resumen Final)
+$ScriptEndTime = Get-Date
+$TotalElapsedTime = ([math]::Round(($ScriptEndTime - $ScriptStartTime).TotalSeconds, 2))
 
-    Write-Log "Procesamiento de todos los archivos PST completado." -Level "SUCCESS"
-    Write-Log ("Tiempo total de ejecución del script: " + $TotalElapsedTime + " segundos.") -Level "INFO"
+Write-Log "Procesamiento de todos los archivos PST completado." -Level "SUCCESS"
+Write-Log ("Tiempo total de ejecución del script: " + $TotalElapsedTime + " segundos.") -Level "INFO"
 
-    $EmailSubject = "Resumen de Backup PST Outlook"
-    $EmailBody = "El script de backup de PST ha finalizado. Aqui esta el resumen de cada archivo:<br><br>"
-    $EmailBody += "<table border='1' cellpadding='5' cellspacing='0'>"
-    $EmailBody += "<tr><th>Archivo</th><th>Estado</th><th>Detalles</th><th>Hash SHA256</th><th>Tamano (MB)</th></tr>"
+$EmailSubject = "Resumen de Backup PST Outlook"
+$EmailBody = "El script de backup de PST ha finalizado. Aqui esta el resumen de cada archivo:<br><br>"
+$EmailBody += "<table border='1' cellpadding='5' cellspacing='0'>"
+$EmailBody += "<tr><th>Archivo</th><th>Estado</th><th>Detalles</th><th>Hash SHA256</th><th>Tamano (MB)</th></tr>"
 
-    $OverallStatus = "EXITO"
-    ForEach ($Result in $BackupResults) {
-        $EmailBody += "<tr>"
-        $EmailBody += "<td>$($Result.FileName)</td>"
-        $EmailBody += "<td>$($Result.Status)</td>"
-        $EmailBody += "<td>$($Result.Details)</td>"
-        $EmailBody += "<td>$($Result.Hash)</td>"
-        $EmailBody += "<td>$($Result.SizeMB)</td>"
-        $EmailBody += "</tr>"
-        If ($Result.Status -ne "EXITO") { $OverallStatus = "FALLO_PARCIAL" }
+$OverallStatus = "EXITO"
+ForEach ($Result in $BackupResults) {
+    $EmailBody += "<tr>"
+    $EmailBody += "<td>$($Result.FileName)</td>"
+    $EmailBody += "<td>$($Result.Status)</td>"
+    $EmailBody += "<td>$($Result.Details)</td>"
+    $EmailBody += "<td>$($Result.Hash)</td>"
+    $EmailBody += "<td>$($Result.SizeMB)</td>"
+    $EmailBody += "</tr>"
+    If ($Result.Status -ne "EXITO") { $OverallStatus = "FALLO_PARCIAL" }
+}
+$EmailBody += "</table><br>"
+
+If ($OverallStatus -eq "FALLO_PARCIAL") {
+    $EmailSubject = "Backup Automatico (Error)"
+    $EmailBody = "ADVERTENCIA: Se detectaron uno o mas fallos durante el proceso de backup.<br><br>" + $EmailBody
+}
+Else {
+    $EmailSubject = "Backup Automatico (Exito)"
+}
+
+$EmailBody += ("Tiempo total de ejecucion del script: " + $TotalElapsedTime + " segundos.")
+$EmailBody += "<br><br>Este es un mensaje automatico. Por favor, no responder a este correo."
+
+Try {
+    If ($script:SmtpServer -and $script:SmtpUsername -and $script:SmtpPassword) {
+        $SecureSmtpCreds = New-Object System.Management.Automation.PSCredential($script:SmtpUsername, ($script:SmtpPassword | ConvertTo-SecureString -AsPlainText -Force))
+        Send-MailMessage -To $script:SmtpTo -From $script:SmtpFrom -Subject $EmailSubject -Body $EmailBody -SmtpServer $script:SmtpServer -Port $script:SmtpPort -UseSSL -Credential $SecureSmtpCreds -BodyAsHtml -Attachments $script:LogFile -WarningAction SilentlyContinue
+        Write-Log "Notificación de resumen de backup enviada por correo." -Level "SUCCESS"
     }
-    $EmailBody += "</table><br>"
+}
+Catch {
+    Write-Log ("ERROR: Fallo al enviar notificacion por correo: " + $_.Exception.Message) -Level "ERROR"
+}
 
-    If ($OverallStatus -eq "FALLO_PARCIAL") {
-        $EmailSubject = "Backup Automatico (Error)"
-        $EmailBody = "ADVERTENCIA: Se detectaron uno o mas fallos durante el proceso de backup.<br><br>" + $EmailBody
+# --- Paso 7: Limpieza Final de MEGA y Staging ---
+If ($script:MegaEnabled) {
+    Write-Log "Sincronización: Verificando cola de subidas de MEGA..." -Level "PROCESS"
+    $MaxWaitMinutes = 120
+    $WaitCount = 0
+    While (($WaitCount -lt ($MaxWaitMinutes * 6))) {
+        $TransfersPath = Get-MegaCmdPath "mega-transfers"
+        $Transfers = & $TransfersPath 2>&1
+        If ($Transfers -match "No active transfers" -or $Transfers.Count -le 1 -or -not $Transfers) { Break }
+        Start-Sleep -Seconds 10
+        $WaitCount++
     }
-    Else {
-        $EmailSubject = "Backup Automatico (Exito)"
-    }
+    Write-Log "Sincronización de MEGA finalizada." -Level "SUCCESS"
+    Write-Log "Cerrando sesión de MEGA..." -Level "PROCESS"
+    $LogoutPath = Get-MegaCmdPath "mega-logout"
+    & $LogoutPath | Out-Null
+}
 
-    $EmailBody += ("Tiempo total de ejecucion del script: " + $TotalElapsedTime + " segundos.")
-    $EmailBody += "<br><br>Este es un mensaje automatico. Por favor, no responder a este correo."
-
-    Try {
-        If ($script:SmtpServer -and $script:SmtpUsername -and $script:SmtpPassword) {
-            $SecureSmtpCreds = New-Object System.Management.Automation.PSCredential($script:SmtpUsername, ($script:SmtpPassword | ConvertTo-SecureString -AsPlainText -Force))
-            Send-MailMessage -To $script:SmtpTo -From $script:SmtpFrom -Subject $EmailSubject -Body $EmailBody -SmtpServer $script:SmtpServer -Port $script:SmtpPort -UseSSL -Credential $SecureSmtpCreds -BodyAsHtml -Attachments $script:LogFile -WarningAction SilentlyContinue
-            Write-Log "Notificación de resumen de backup enviada por correo." -Level "SUCCESS"
-        }
-    }
-    Catch {
-        Write-Log ("ERROR: Fallo al enviar notificacion por correo: " + $_.Exception.Message) -Level "ERROR"
-    }
-
-    # --- Paso 7: Limpieza Final de MEGA y Staging ---
-    If ($script:MegaEnabled) {
-        Write-Log "Sincronización: Verificando cola de subidas de MEGA..." -Level "PROCESS"
-        $MaxWaitMinutes = 120
-        $WaitCount = 0
-        While (($WaitCount -lt ($MaxWaitMinutes * 6))) {
-            $TransfersPath = Get-MegaCmdPath "mega-transfers"
-            $Transfers = & $TransfersPath 2>&1
-            If ($Transfers -match "No active transfers" -or $Transfers.Count -le 1 -or -not $Transfers) { Break }
-            Start-Sleep -Seconds 10
-            $WaitCount++
-        }
-        Write-Log "Sincronización de MEGA finalizada." -Level "SUCCESS"
-        Write-Log "Cerrando sesión de MEGA..." -Level "PROCESS"
-        $LogoutPath = Get-MegaCmdPath "mega-logout"
-        & $LogoutPath | Out-Null
-    }
-
-    Write-Log "Limpiando archivos temporales de staging..." -Level "PROCESS"
-    Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
+Write-Log "Limpiando archivos temporales de staging..." -Level "PROCESS"
+Remove-Item -Path $script:Staging_Folder -Recurse -Force -ErrorAction SilentlyContinue
 
     $FinalMsg = $(If ($OverallStatus -eq "EXITO") { "El backup de Outlook ha finalizado con éxito." } Else { "El backup ha finalizado con algunos errores. Revise su correo." })
     Show-UserMessage -Title "Backup Finalizado" -Message $FinalMsg
