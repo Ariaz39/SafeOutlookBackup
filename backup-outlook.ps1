@@ -452,15 +452,7 @@ ForEach ($PSTFile in $PSTFiles) {
     #region 5. Gestión de Archivos (OneDrive y MEGA)
     Write-Log ("Iniciando distribución de archivos validados para '" + $BaseFileName + "'...") -Level "PROCESS"
     Try {
-        # 5.1 Subida a MEGA
-        If ($script:MegaEnabled) {
-            Write-Log ("Enviando subida a MEGA para '" + $BaseFileName + "'...") -Level "PROCESS"
-            $PutPath = Get-MegaCmdPath "mega-put"
-            & $PutPath -c "$StagingPSTPath" "$script:MegaRemoteDest"
-            Write-Log "Archivo aceptado por MEGA CMD (subida en curso)." -Level "SUCCESS"
-        }
-
-        # 5.2 Copia a OneDrive
+        # 5.1 Copia a OneDrive (Local, rápida)
         If (-not (Test-Path $script:OneDrive_Folder)) {
             New-Item -Path $script:OneDrive_Folder -ItemType Directory -Force | Out-Null
         }
@@ -478,6 +470,14 @@ ForEach ($PSTFile in $PSTFiles) {
                 Write-Log ("Rotación OneDrive: Eliminando backup antiguo '" + $FileToDelete.Name + "'.")
                 Remove-Item -Path $FileToDelete.FullName -Force
             }
+        }
+
+        # 5.2 Subida a MEGA (Red, lenta)
+        If ($script:MegaEnabled) {
+            Write-Log ("Enviando subida a MEGA para '" + $BaseFileName + "'...") -Level "PROCESS"
+            $PutPath = Get-MegaCmdPath "mega-put"
+            & $PutPath -c "$StagingPSTPath" "$script:MegaRemoteDest"
+            Write-Log "Archivo aceptado por MEGA CMD (subida en curso)." -Level "SUCCESS"
         }
 
         $FinalFileSizeMB = ([math]::Round((Get-Item $OneDrivePSTPath).Length / 1MB, 2))
@@ -508,6 +508,7 @@ ForEach ($PSTFile in $PSTFiles) {
 Write-Host ">>> IMPORTANTE: Outlook ya puede ser reabierto. <<<" -ForegroundColor Yellow
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Log "Notificación al usuario: Outlook puede ser reabierto." -Level "SUCCESS"
+Show-UserMessage -Title "Outlook Liberado" -Message "La copia local finalizó. Ya puedes usar Outlook normalmente. Las subidas a la nube continuarán en segundo plano."
 
 #region 6. Trazabilidad y Notificación SMTP (Resumen Final)
 $ScriptEndTime = Get-Date
